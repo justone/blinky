@@ -84,6 +84,7 @@ func main() {
 	}
 }
 
+// animate each arm on and then each arm off
 func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
 
 	var tentacle = 0
@@ -119,6 +120,7 @@ func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
 	}
 }
 
+// turn on all LEDs of a certain color
 func solid(p *piglow.Piglow, color string, quit chan bool, done chan bool) {
 
 	log.Println("setting to ", color)
