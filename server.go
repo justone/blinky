@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -21,6 +22,10 @@ func main() {
 	go func(in chan string) {
 		var p *piglow.Piglow
 		var err error
+
+		var quit = make(chan bool)
+		var done = make(chan bool)
+		var running = false
 
 		// Create a new Piglow
 		p, err = piglow.NewPiglow()
@@ -39,35 +44,29 @@ func main() {
 
 			log.Println("processing command:", command)
 
-			p.SetAll(0)
-			switch command {
-			case "green":
-				p.SetGreen(8)
-			case "blue":
-				p.SetBlue(8)
-			case "white":
-				p.SetWhite(8)
-			case "yellow":
-				p.SetYellow(8)
-			case "orange":
-				p.SetOrange(8)
-			case "red":
-				p.SetRed(8)
-			case "clear":
-			case "all":
-				p.SetAll(8)
-			default:
-				p.SetLED(int8(len(command)%17), 8)
+			// if animation is already running, stop it
+			// and wait for it to finish
+			if running {
+				quit <- true
+				<-done
 			}
+
+			p.SetAll(0)
 			err = p.Apply()
-			if err != nil { // Apply the changes
-				log.Fatal("Couldn't apply changes: ", err)
+			switch command {
+			case "arms":
+				running = true
+				go arms(p, quit, done)
+			default:
+				running = true
+				go solid(p, command, quit, done)
 			}
 		}
 	}(commandChan)
 
 	log.Println("Starting queue poll on", webqueue)
 	for {
+		log.Println("Poll...")
 		res, err := http.Get(webqueue)
 		if err != nil {
 			log.Fatalln("Error:", err)
@@ -81,6 +80,80 @@ func main() {
 			}
 
 			commandChan <- strings.TrimSpace(string(body))
+		}
+	}
+}
+
+func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
+
+	var tentacle = 0
+	var value = 4
+
+	for {
+		select {
+		case <-quit:
+			done <- true
+			return
+		default:
+
+			if tentacle == 3 {
+				tentacle = 0
+				if value == 4 {
+					value = 0
+				} else {
+					value = 4
+				}
+			}
+
+			p.SetTentacle(tentacle, uint8(value))
+			err := p.Apply()
+			if err != nil { // Apply the changes
+				log.Fatal("Couldn't apply changes: ", err)
+			}
+
+			// next tentacle
+			tentacle += 1
+
+			time.Sleep(time.Second / 10)
+		}
+	}
+}
+
+func solid(p *piglow.Piglow, color string, quit chan bool, done chan bool) {
+
+	log.Println("setting to ", color)
+	switch color {
+	case "green":
+		p.SetGreen(8)
+	case "blue":
+		p.SetBlue(8)
+	case "white":
+		p.SetWhite(8)
+	case "yellow":
+		p.SetYellow(8)
+	case "orange":
+		p.SetOrange(8)
+	case "red":
+		p.SetRed(8)
+	case "clear":
+	case "all":
+		p.SetAll(8)
+	default:
+		p.SetLED(int8(len(color)%17), 8)
+	}
+	err := p.Apply()
+	if err != nil { // Apply the changes
+		log.Fatal("Couldn't apply changes: ", err)
+	}
+
+	// wait for the end
+	for {
+		select {
+		case <-quit:
+			done <- true
+			return
+		default:
+			time.Sleep(time.Second / 10)
 		}
 	}
 }
