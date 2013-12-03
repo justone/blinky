@@ -19,50 +19,8 @@ func main() {
 
 	var commandChan = make(chan string)
 
-	go func(in chan string) {
-		var p *piglow.Piglow
-		var err error
-
-		var quit = make(chan bool)
-		var done = make(chan bool)
-		var running = false
-
-		// Create a new Piglow
-		p, err = piglow.NewPiglow()
-		if err != nil {
-			log.Fatal("Couldn't create a Piglow: ", err)
-		}
-
-		p.SetAll(0)
-		err = p.Apply()
-		if err != nil { // Apply the changes
-			log.Fatal("Couldn't apply changes: ", err)
-		}
-
-		for {
-			command := <-in
-
-			log.Println("processing command:", command)
-
-			// if animation is already running, stop it
-			// and wait for it to finish
-			if running {
-				quit <- true
-				<-done
-			}
-
-			p.SetAll(0)
-			err = p.Apply()
-			switch command {
-			case "arms":
-				running = true
-				go arms(p, quit, done)
-			default:
-				running = true
-				go solid(p, command, quit, done)
-			}
-		}
-	}(commandChan)
+	// start up command dispatcher
+	go dispatcher(commandChan)
 
 	log.Println("Starting queue poll on", webqueue)
 	for {
@@ -79,8 +37,57 @@ func main() {
 				log.Fatal(err)
 			}
 
+			// send command over to dispatcher
 			commandChan <- strings.TrimSpace(string(body))
 		}
+	}
+}
+
+func dispatcher(in chan string) {
+	var p *piglow.Piglow
+	var err error
+
+	var quit = make(chan bool)
+	var done = make(chan bool)
+	var running = false
+
+	// Create a new Piglow
+	p, err = piglow.NewPiglow()
+	if err != nil {
+		log.Fatal("Couldn't create a Piglow: ", err)
+	}
+
+	// clear the LEDs
+	p.SetAll(0)
+	err = p.Apply()
+	if err != nil { // Apply the changes
+		log.Fatal("Couldn't apply changes: ", err)
+	}
+
+	for {
+		command := <-in
+
+		log.Println("processing command:", command)
+
+		// if animation is already running, stop it
+		// and wait for it to finish
+		if running {
+			quit <- true
+			<-done
+		}
+
+		// clear all LEDs
+		p.SetAll(0)
+		err = p.Apply()
+
+		// dispatch command to sub-goroutines
+		switch command {
+		case "arms":
+			go arms(p, quit, done)
+		default:
+			go solid(p, command, quit, done)
+		}
+		running = true
 	}
 }
 
