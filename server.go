@@ -21,6 +21,12 @@ var colorToLEDs = map[string][3]int8{
 	"red":    [3]int8{0, 6, 17},
 }
 
+type Blinky struct {
+	p    *piglow.Piglow
+	quit chan bool
+	done chan bool
+}
+
 func main() {
 	var webqueue string
 	if webqueue = os.Getenv("WEBQUEUE"); len(webqueue) == 0 {
@@ -67,6 +73,8 @@ func dispatcher(in chan string) {
 		log.Fatal("Couldn't create a Piglow: ", err)
 	}
 
+	var blinky = &Blinky{p, quit, done}
+
 	// clear the LEDs
 	p.SetAll(0)
 	err = p.Apply()
@@ -93,134 +101,122 @@ func dispatcher(in chan string) {
 		// dispatch command to sub-goroutines
 		switch {
 		case command == "arms":
-			go arms(p, false, quit, done)
+			go arms(blinky, false)
 		case command == "arms2":
-			go arms(p, true, quit, done)
+			go arms(blinky, true)
 		case strings.HasSuffix(command, "spin"):
-			go spin(p, strings.TrimSuffix(command, "spin"), false, quit, done)
+			go spin(blinky, strings.TrimSuffix(command, "spin"), false)
 		case strings.HasSuffix(command, "spin2"):
-			go spin(p, strings.TrimSuffix(command, "spin2"), true, quit, done)
+			go spin(blinky, strings.TrimSuffix(command, "spin2"), true)
 		default:
-			go solid(p, command, quit, done)
+			go solid(blinky, command)
 		}
 		running = true
 	}
 }
 
 // animate each arm on and then each arm off
-func arms(p *piglow.Piglow, reset bool, quit chan bool, done chan bool) {
+func arms(blinky *Blinky, reset bool) {
 
 	var tentacle = 0
 	var value = 4
 
-	for {
-		select {
-		case <-quit:
-			done <- true
-			return
-		default:
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+		if tentacle == 3 {
+			tentacle = 0
 
-			if tentacle == 3 {
-				tentacle = 0
-
-				if !reset {
-					if value == 4 {
-						value = 0
-					} else {
-						value = 4
-					}
+			if !reset {
+				if value == 4 {
+					value = 0
+				} else {
+					value = 4
 				}
 			}
-
-			if reset {
-				p.SetAll(0)
-				p.Apply()
-			}
-			p.SetTentacle(tentacle, uint8(value))
-			p.Apply()
-
-			// next tentacle
-			tentacle += 1
-
-			time.Sleep(time.Second / 10)
 		}
-	}
+
+		if reset {
+			p.SetAll(0)
+			p.Apply()
+		}
+		p.SetTentacle(tentacle, uint8(value))
+		p.Apply()
+
+		// next tentacle
+		tentacle += 1
+	})
 }
 
 // spin through a particular color
-func spin(p *piglow.Piglow, color string, reset bool, quit chan bool, done chan bool) {
+func spin(blinky *Blinky, color string, reset bool) {
 
 	leds := colorToLEDs[color]
 	var index = 0
 	var value = 4
 
-	for {
-		select {
-		case <-quit:
-			done <- true
-			return
-		default:
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+		if index == 3 {
+			index = 0
 
-			if index == 3 {
-				index = 0
-
-				if !reset {
-					if value == 4 {
-						value = 0
-					} else {
-						value = 4
-					}
+			if !reset {
+				if value == 4 {
+					value = 0
+				} else {
+					value = 4
 				}
 			}
+		}
 
-			if reset {
-				p.SetAll(0)
-				p.Apply()
-			}
-			p.SetLED(int8(leds[index]), uint8(value))
+		if reset {
+			p.SetAll(0)
 			p.Apply()
+		}
+		p.SetLED(int8(leds[index]), uint8(value))
+		p.Apply()
 
-			// next index
-			index += 1
+		// next index
+		index += 1
+	})
+}
 
-			time.Sleep(time.Second / 10)
+// This function handles the common case of a simple animation with no cleanup
+func animate(blinky *Blinky, timeout time.Duration, callback func(*piglow.Piglow)) {
+	for {
+		select {
+		case <-blinky.quit:
+			blinky.done <- true
+			return
+		default:
+			callback(blinky.p)
+			time.Sleep(timeout)
 		}
 	}
 }
 
 // turn on all LEDs of a certain color
-func solid(p *piglow.Piglow, color string, quit chan bool, done chan bool) {
+func solid(blinky *Blinky, color string) {
 
 	log.Println("setting to ", color)
 	switch color {
 	case "green":
-		p.SetGreen(8)
+		blinky.p.SetGreen(8)
 	case "blue":
-		p.SetBlue(8)
+		blinky.p.SetBlue(8)
 	case "white":
-		p.SetWhite(8)
+		blinky.p.SetWhite(8)
 	case "yellow":
-		p.SetYellow(8)
+		blinky.p.SetYellow(8)
 	case "orange":
-		p.SetOrange(8)
+		blinky.p.SetOrange(8)
 	case "red":
-		p.SetRed(8)
+		blinky.p.SetRed(8)
 	case "clear":
 	case "all":
-		p.SetAll(8)
+		blinky.p.SetAll(8)
 	default:
-		p.SetLED(int8(len(color)%17), 8)
+		blinky.p.SetLED(int8(len(color)%17), 8)
 	}
-	p.Apply()
+	blinky.p.Apply()
 
-	// wait for the end
-	for {
-		select {
-		case <-quit:
-			done <- true
-			return
-		default:
-			time.Sleep(time.Second / 10)
-		}
-	}
+	// wait for the end, aka no animation
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {})
 }
