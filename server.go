@@ -11,6 +11,16 @@ import (
 	"time"
 )
 
+// from go-piglow
+var colorToLEDs = map[string][3]int8{
+	"white":  [3]int8{12, 9, 10},
+	"blue":   [3]int8{14, 4, 11},
+	"green":  [3]int8{3, 5, 13},
+	"yellow": [3]int8{2, 8, 15},
+	"orange": [3]int8{1, 7, 16},
+	"red":    [3]int8{0, 6, 17},
+}
+
 func main() {
 	var webqueue string
 	if webqueue = os.Getenv("WEBQUEUE"); len(webqueue) == 0 {
@@ -81,9 +91,15 @@ func dispatcher(in chan string) {
 		err = p.Apply()
 
 		// dispatch command to sub-goroutines
-		switch command {
-		case "arms":
-			go arms(p, quit, done)
+		switch {
+		case command == "arms":
+			go arms(p, false, quit, done)
+		case command == "arms2":
+			go arms(p, true, quit, done)
+		case strings.HasSuffix(command, "spin"):
+			go spin(p, strings.TrimSuffix(command, "spin"), false, quit, done)
+		case strings.HasSuffix(command, "spin2"):
+			go spin(p, strings.TrimSuffix(command, "spin2"), true, quit, done)
 		default:
 			go solid(p, command, quit, done)
 		}
@@ -92,7 +108,7 @@ func dispatcher(in chan string) {
 }
 
 // animate each arm on and then each arm off
-func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
+func arms(p *piglow.Piglow, reset bool, quit chan bool, done chan bool) {
 
 	var tentacle = 0
 	var value = 4
@@ -106,13 +122,20 @@ func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
 
 			if tentacle == 3 {
 				tentacle = 0
-				if value == 4 {
-					value = 0
-				} else {
-					value = 4
+
+				if !reset {
+					if value == 4 {
+						value = 0
+					} else {
+						value = 4
+					}
 				}
 			}
 
+			if reset {
+				p.SetAll(0)
+				p.Apply()
+			}
 			p.SetTentacle(tentacle, uint8(value))
 			err := p.Apply()
 			if err != nil { // Apply the changes
@@ -121,6 +144,47 @@ func arms(p *piglow.Piglow, quit chan bool, done chan bool) {
 
 			// next tentacle
 			tentacle += 1
+
+			time.Sleep(time.Second / 10)
+		}
+	}
+}
+
+// spin through a particular color
+func spin(p *piglow.Piglow, color string, reset bool, quit chan bool, done chan bool) {
+
+	leds := colorToLEDs[color]
+	var index = 0
+	var value = 4
+
+	for {
+		select {
+		case <-quit:
+			done <- true
+			return
+		default:
+
+			if index == 3 {
+				index = 0
+
+				if !reset {
+					if value == 4 {
+						value = 0
+					} else {
+						value = 4
+					}
+				}
+			}
+
+			if reset {
+				p.SetAll(0)
+				p.Apply()
+			}
+			p.SetLED(int8(leds[index]), uint8(value))
+			p.Apply()
+
+			// next index
+			index += 1
 
 			time.Sleep(time.Second / 10)
 		}
