@@ -137,10 +137,7 @@ func arms(p *piglow.Piglow, reset bool, quit chan bool, done chan bool) {
 				p.Apply()
 			}
 			p.SetTentacle(tentacle, uint8(value))
-			err := p.Apply()
-			if err != nil { // Apply the changes
-				log.Fatal("Couldn't apply changes: ", err)
-			}
+			p.Apply()
 
 			// next tentacle
 			tentacle += 1
@@ -214,10 +211,7 @@ func solid(p *piglow.Piglow, color string, quit chan bool, done chan bool) {
 	default:
 		p.SetLED(int8(len(color)%17), 8)
 	}
-	err := p.Apply()
-	if err != nil { // Apply the changes
-		log.Fatal("Couldn't apply changes: ", err)
-	}
+	p.Apply()
 
 	// wait for the end
 	for {
