@@ -21,6 +21,15 @@ var colorToLEDs = map[string][3]int8{
 	"red":    [3]int8{0, 6, 17},
 }
 
+var colorOrder = [6]string{
+	"white",
+	"blue",
+	"green",
+	"yellow",
+	"orange",
+	"red",
+}
+
 type Blinky struct {
 	p    *piglow.Piglow
 	quit chan bool
@@ -100,6 +109,12 @@ func dispatcher(in chan string) {
 
 		// dispatch command to sub-goroutines
 		switch {
+		case command == "bounce":
+			go bounce(blinky, false)
+		case command == "bounce2":
+			go bounce(blinky, true)
+		case command == "cycle":
+			go cycle(blinky)
 		case command == "arms":
 			go arms(blinky, false)
 		case command == "arms2":
@@ -175,6 +190,76 @@ func spin(blinky *Blinky, color string, reset bool) {
 
 		// next index
 		index += 1
+	})
+}
+
+// cycle leds from the center
+func cycle(blinky *Blinky) {
+
+	var index = 0
+	var value = 4
+
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+		if index == len(colorOrder) {
+			index = 0
+
+			if value == 4 {
+				value = 0
+			} else {
+				value = 4
+			}
+		}
+
+		for _, led := range colorToLEDs[colorOrder[index]] {
+			p.SetLED(led, uint8(value))
+		}
+		p.Apply()
+
+		// next index
+		index += 1
+	})
+}
+
+// bounce a single led along the arm(s)
+func bounce(blinky *Blinky, singleArm bool) {
+
+	var index = 0
+	var value = 4
+	var arm = 0
+	var outward = true
+
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+
+		if index == (len(colorOrder) - 1) {
+			outward = false
+		}
+		if index == 0 {
+			outward = true
+
+			// advance arm if in single arm mode
+			if singleArm {
+				arm += 1
+				if arm == 3 {
+					arm = 0
+				}
+			}
+		}
+
+		p.SetAll(0)
+		p.Apply()
+		for i, led := range colorToLEDs[colorOrder[index]] {
+			if !singleArm || arm == i {
+				p.SetLED(led, uint8(value))
+			}
+		}
+		p.Apply()
+
+		// next index
+		if outward {
+			index += 1
+		} else {
+			index -= 1
+		}
 	})
 }
 
