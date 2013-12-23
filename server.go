@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/wjessop/go-piglow"
 
+	"flag"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -38,35 +39,41 @@ type Blinky struct {
 }
 
 func main() {
-	var webqueue string
-	if webqueue = os.Getenv("WEBQUEUE"); len(webqueue) == 0 {
-		log.Fatal("Set queue with WEBQUEUE env")
-	}
-
 	var commandChan = make(chan string)
 
 	// start up command dispatcher
 	go dispatcher(commandChan)
 
-	log.Println("Starting queue poll on", webqueue)
-	for {
-		log.Println("Poll...")
-		res, err := http.Get(webqueue)
-		if err != nil {
-			log.Fatalln("Error:", err)
-		}
+	var webqueue string
+	if webqueue = os.Getenv("WEBQUEUE"); len(webqueue) > 0 {
+		log.Println("WEBQUEUE env variable found, polling", webqueue)
+		for {
+			res, err := http.Get(webqueue)
+			if err != nil {
+				log.Fatalln("Error:", err)
+			}
 
-		body, err := ioutil.ReadAll(res.Body)
-		res.Body.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
+			body, err := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		if res.StatusCode == 200 {
-			// send command over to dispatcher
-			commandChan <- strings.TrimSpace(string(body))
+			if res.StatusCode == 200 {
+				// send command over to dispatcher
+				commandChan <- strings.TrimSpace(string(body))
+			}
 		}
+	} else {
+		var animation = flag.String("a", "cycle", "specify an animation to run (default: cycle)")
+		flag.Parse()
+
+		commandChan <- *animation
+
+		var sleepForever = make(chan int)
+		<-sleepForever
 	}
+
 }
 
 func dispatcher(in chan string) {
@@ -95,7 +102,7 @@ func dispatcher(in chan string) {
 	for {
 		command := <-in
 
-		log.Println("processing command:", command)
+		log.Println("Starting animation:", command)
 
 		// if animation is already running, stop it
 		// and wait for it to finish
