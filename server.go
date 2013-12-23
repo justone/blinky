@@ -56,13 +56,13 @@ func main() {
 			log.Fatalln("Error:", err)
 		}
 
-		if res.StatusCode == 200 {
-			body, err := ioutil.ReadAll(res.Body)
-			res.Body.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
+		body, err := ioutil.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
 
+		if res.StatusCode == 200 {
 			// send command over to dispatcher
 			commandChan <- strings.TrimSpace(string(body))
 		}
