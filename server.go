@@ -259,13 +259,17 @@ func shimmer(blinky *Blinky) {
 	var min = 2
 	var max = 10
 
-	blinky.p.SetAll(uint8(min))
-	blinky.p.Apply()
+	var init = func(p *piglow.Piglow) {
+		p.SetAll(uint8(min))
+		p.Apply()
+	}
 
-	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+	var animate = func(p *piglow.Piglow) {
 		p.SetLED(int8(rand.Intn(18)), uint8(rand.Intn(max-min)+min))
 		p.Apply()
-	})
+	}
+
+	animateWithInit(blinky, time.Second/10, init, animate)
 }
 
 // bounce a single led along the arm(s)
@@ -325,31 +329,40 @@ func animate(blinky *Blinky, timeout time.Duration, callback func(*piglow.Piglow
 	}
 }
 
+// animateWithInit is for animations that need initialization
+func animateWithInit(blinky *Blinky, timeout time.Duration, init func(*piglow.Piglow), animation func(*piglow.Piglow)) {
+
+	init(blinky.p)
+
+	animate(blinky, timeout, animation)
+}
+
 // turn on all LEDs of a certain color
 func solid(blinky *Blinky, color string) {
 
-	log.Println("setting to ", color)
-	switch color {
-	case "green":
-		blinky.p.SetGreen(8)
-	case "blue":
-		blinky.p.SetBlue(8)
-	case "white":
-		blinky.p.SetWhite(8)
-	case "yellow":
-		blinky.p.SetYellow(8)
-	case "orange":
-		blinky.p.SetOrange(8)
-	case "red":
-		blinky.p.SetRed(8)
-	case "clear":
-	case "all":
-		blinky.p.SetAll(8)
-	default:
-		blinky.p.SetLED(int8(len(color)%17), 8)
+	var init = func(p *piglow.Piglow) {
+		switch color {
+		case "green":
+			p.SetGreen(8)
+		case "blue":
+			p.SetBlue(8)
+		case "white":
+			p.SetWhite(8)
+		case "yellow":
+			p.SetYellow(8)
+		case "orange":
+			p.SetOrange(8)
+		case "red":
+			p.SetRed(8)
+		case "clear":
+		case "all":
+			p.SetAll(8)
+		default:
+			p.SetLED(int8(len(color)%17), 8)
+		}
+		p.Apply()
 	}
-	blinky.p.Apply()
 
 	// wait for the end, aka no animation
-	animate(blinky, time.Second/10, func(p *piglow.Piglow) {})
+	animateWithInit(blinky, time.Second/10, init, func(p *piglow.Piglow) {})
 }
