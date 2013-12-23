@@ -109,6 +109,8 @@ func dispatcher(in chan string) {
 
 		// dispatch command to sub-goroutines
 		switch {
+		case command == "pulse":
+			go pulse(blinky)
 		case command == "bounce":
 			go bounce(blinky, false)
 		case command == "bounce2":
@@ -217,6 +219,34 @@ func cycle(blinky *Blinky) {
 
 		// next index
 		index += 1
+	})
+}
+
+// pulse all LEDs
+func pulse(blinky *Blinky) {
+
+	var step = 2
+	var max = 30
+	var value = 2
+	var brighten = true
+
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+
+		if value == max {
+			brighten = false
+		}
+		if value == 2 {
+			brighten = true
+		}
+
+		p.SetAll(uint8(value))
+		p.Apply()
+
+		if brighten {
+			value += step
+		} else {
+			value -= step
+		}
 	})
 }
 
