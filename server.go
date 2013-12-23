@@ -5,6 +5,7 @@ import (
 
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -109,6 +110,8 @@ func dispatcher(in chan string) {
 
 		// dispatch command to sub-goroutines
 		switch {
+		case command == "shimmer":
+			go shimmer(blinky)
 		case command == "pulse":
 			go pulse(blinky)
 		case command == "bounce":
@@ -247,6 +250,21 @@ func pulse(blinky *Blinky) {
 		} else {
 			value -= step
 		}
+	})
+}
+
+// shimmer all LEDs
+func shimmer(blinky *Blinky) {
+
+	var min = 2
+	var max = 10
+
+	blinky.p.SetAll(uint8(min))
+	blinky.p.Apply()
+
+	animate(blinky, time.Second/10, func(p *piglow.Piglow) {
+		p.SetLED(int8(rand.Intn(18)), uint8(rand.Intn(max-min)+min))
+		p.Apply()
 	})
 }
 
