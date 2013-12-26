@@ -318,7 +318,7 @@ func shimmer(blinky *Blinky) {
 		p.Apply()
 	}
 
-	animateWithInit(blinky, time.Second/10, init, animate)
+	animateWithInit(blinky, time.Second/50, init, animate)
 }
 
 // bounce a single led along the arm(s)
