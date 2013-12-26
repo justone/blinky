@@ -4,6 +4,7 @@ import (
 	"github.com/wjessop/go-piglow"
 
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -30,6 +31,22 @@ var colorOrder = [6]string{
 	"yellow",
 	"orange",
 	"red",
+}
+
+var animations = map[string]func(*Blinky){
+	"shimmer: turn random LEDs to random brightnesses":       func(b *Blinky) { shimmer(b) },
+	"pulse: pulse all LEDs up and down":                      func(b *Blinky) { pulse(b) },
+	"bounce: bounce a single LED up and down all arms":       func(b *Blinky) { bounce(b, false) },
+	"bounce2: bounce a single LED each arm in turn":          func(b *Blinky) { bounce(b, true) },
+	"cycle: turn all LEDs on and then off in bands":          func(b *Blinky) { cycle(b) },
+	"arms: light each arm in turn and then turn of each arm": func(b *Blinky) { arms(b, false) },
+	"arms2: light each arm in turn by itself":                func(b *Blinky) { arms(b, true) },
+}
+
+var animationsColor = map[string]func(*Blinky, string){
+	"<color>spin: spin through the LEDs of the specified color":  func(b *Blinky, color string) { spin(b, color, false) },
+	"<color>spin2: spin through the LEDs of the specified color": func(b *Blinky, color string) { spin(b, color, true) },
+	"<color>: turn the specified color LED on":                   func(b *Blinky, color string) { solid(b, color) },
 }
 
 type Blinky struct {
@@ -66,12 +83,30 @@ func main() {
 		}
 	} else {
 		var animation = flag.String("a", "cycle", "specify an animation to run (default: cycle)")
+		var list = flag.Bool("l", false, "list available animations")
 		flag.Parse()
 
-		commandChan <- *animation
+		if *list {
+			fmt.Println("\nAvailable animations:")
+			for desc, _ := range animations {
+				fmt.Println("  ", desc)
+			}
+			for desc, _ := range animationsColor {
+				fmt.Println("  ", desc)
+			}
 
-		var sleepForever = make(chan int)
-		<-sleepForever
+			fmt.Println("\nAvailable colors:")
+			for _, color := range colorOrder {
+				fmt.Println("  ", color)
+			}
+
+			fmt.Println("")
+		} else {
+			commandChan <- *animation
+
+			var sleepForever = make(chan int)
+			<-sleepForever
+		}
 	}
 
 }
@@ -115,30 +150,37 @@ func dispatcher(in chan string) {
 		p.SetAll(0)
 		err = p.Apply()
 
-		// dispatch command to sub-goroutines
-		switch {
-		case command == "shimmer":
-			go shimmer(blinky)
-		case command == "pulse":
-			go pulse(blinky)
-		case command == "bounce":
-			go bounce(blinky, false)
-		case command == "bounce2":
-			go bounce(blinky, true)
-		case command == "cycle":
-			go cycle(blinky)
-		case command == "arms":
-			go arms(blinky, false)
-		case command == "arms2":
-			go arms(blinky, true)
-		case strings.HasSuffix(command, "spin"):
-			go spin(blinky, strings.TrimSuffix(command, "spin"), false)
-		case strings.HasSuffix(command, "spin2"):
-			go spin(blinky, strings.TrimSuffix(command, "spin2"), true)
-		default:
-			go solid(blinky, command)
+		running = false
+
+		if !running {
+		ANIM:
+			for key, value := range animations {
+				if strings.HasPrefix(key, command+":") {
+					running = true
+					go value(blinky)
+					break ANIM
+				}
+			}
 		}
-		running = true
+
+		if !running {
+		ANIMCOLOR:
+			for key, value := range animationsColor {
+				if strings.Contains(key, "<color>") {
+					for _, color := range colorOrder {
+						if strings.HasPrefix(key, strings.Replace(command, color, "<color>", -1)+":") {
+							running = true
+							go value(blinky, color)
+							break ANIMCOLOR
+						}
+					}
+				}
+			}
+		}
+
+		if !running {
+			log.Println("Can't understand animation", command)
+		}
 	}
 }
 
