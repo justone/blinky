@@ -1,15 +1,13 @@
 package main
 
 import (
+	"github.com/justone/pmb/api"
 	"github.com/wjessop/go-piglow"
 
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -61,31 +59,47 @@ func main() {
 	// start up command dispatcher
 	go dispatcher(commandChan)
 
-	var webqueue string
-	if webqueue = os.Getenv("WEBQUEUE"); len(webqueue) > 0 {
-		log.Println("WEBQUEUE env variable found, polling", webqueue)
-		for {
-			res, err := http.Get(webqueue)
-			if err != nil {
-				log.Fatalln("Error:", err)
-			}
+	var animation = flag.String("a", "cycle", "specify an animation to run (default: cycle)")
+	var list = flag.Bool("l", false, "list available animations")
+	var usePMB = flag.Bool("p", false, "use messages from PMB to animate")
+	flag.Parse()
 
-			body, err := ioutil.ReadAll(res.Body)
-			res.Body.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if res.StatusCode == 200 {
-				// send command over to dispatcher
-				commandChan <- strings.TrimSpace(string(body))
-			}
+	if *usePMB {
+		bus := pmb.GetPMB(make(map[string]string))
+		conn, err := bus.GetConnection("blinky", false)
+		if err != nil {
+			log.Println(err)
+			return
 		}
-	} else {
-		var animation = flag.String("a", "cycle", "specify an animation to run (default: cycle)")
-		var list = flag.Bool("l", false, "list available animations")
-		flag.Parse()
 
+		buildsHappening := 0
+
+		for {
+			message := <-conn.In
+			fmt.Println(message.Raw)
+
+			if message.Contents["type"].(string) == "RelayBuildMessage" {
+				buildMessage := message.Contents["message"].(map[string]interface{})
+				messageType := buildMessage["event"].(string)
+
+				if messageType == "job_build_triggered" {
+					buildsHappening += 1
+					if buildsHappening > 0 {
+						commandChan <- "cycle"
+					}
+				}
+				if messageType == "job_build_completed" {
+					buildsHappening -= 1
+					if buildsHappening <= 0 {
+						commandChan <- "off"
+						buildsHappening = 0
+					}
+				}
+			}
+
+		}
+
+	} else {
 		if *list {
 			fmt.Println("\nAvailable animations:")
 			for desc, _ := range animations {
